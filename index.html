@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Martin Luk 美股筛选器</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --amber: #d29922;
+    --blue: #388bfd;
+    --purple: #bc8cff;
+    --teal: #39d353;
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+
+  header { padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+           display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #388bfd, #bc8cff);
+               border-radius: 8px; display: flex; align-items: center; justify-content: center;
+               font-size: 16px; }
+  .logo h1 { font-size: 16px; font-weight: 600; }
+  .logo p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .last-update { font-size: 11px; color: var(--muted); }
+
+  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+         background: var(--bg3); color: var(--text); font-size: 13px; cursor: pointer;
+         transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--bg2); border-color: var(--blue); }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn.primary:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .stats-bar { display: flex; gap: 10px; padding: 12px 24px; flex-wrap: wrap;
+               border-bottom: 1px solid var(--border); }
+  .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+          padding: 10px 16px; min-width: 100px; }
+  .stat .lbl { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .stat .val { font-size: 22px; font-weight: 700; color: var(--text); }
+
+  .controls { display: flex; gap: 8px; padding: 12px 24px; flex-wrap: wrap;
+              align-items: center; border-bottom: 1px solid var(--border); }
+  .controls label { font-size: 12px; color: var(--muted); }
+
+  select { background: var(--bg2); border: 1px solid var(--border); color: var(--text);
+           border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+  select:focus { outline: none; border-color: var(--blue); }
+
+  .filter-group { display: flex; align-items: center; gap: 6px; }
+  .range-wrap { display: flex; align-items: center; gap: 6px; }
+  input[type=range] { width: 90px; accent-color: var(--blue); cursor: pointer; }
+
+  .tabs { display: flex; gap: 4px; padding: 10px 24px; border-bottom: 1px solid var(--border);
+          flex-wrap: wrap; }
+  .tab { padding: 4px 12px; border-radius: 999px; border: 1px solid transparent;
+         font-size: 12px; cursor: pointer; color: var(--muted); background: transparent;
+         transition: all 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--bg3); border-color: var(--border); color: var(--text);
+                font-weight: 500; }
+
+  .table-wrap { overflow-x: auto; padding: 0 0 60px; }
+  table { width: 100%; border-collapse: collapse; min-width: 820px; }
+  thead th { position: sticky; top: 0; z-index: 10; background: var(--bg);
+             padding: 10px 16px; text-align: left; font-size: 11px; color: var(--muted);
+             font-weight: 500; border-bottom: 1px solid var(--border);
+             cursor: pointer; white-space: nowrap; user-select: none; }
+  thead th:hover { color: var(--text); }
+  thead th .sort-arrow { opacity: 0.4; margin-left: 3px; }
+  thead th.sorted .sort-arrow { opacity: 1; color: var(--blue); }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:hover { background: var(--bg2); }
+  td { padding: 10px 16px; vertical-align: middle; }
+
+  .ticker-cell .sym { font-size: 15px; font-weight: 700; color: var(--text); }
+  .ticker-cell .sym a { color: inherit; text-decoration: none; }
+  .ticker-cell .sym a:hover { color: var(--blue); }
+  .ticker-cell .sec { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  .score-wrap { display: flex; align-items: center; gap: 8px; min-width: 100px; }
+  .score-num { font-size: 16px; font-weight: 700; min-width: 28px; }
+  .score-bar-bg { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; }
+  .score-bar-fill { height: 4px; border-radius: 2px; transition: width 0.3s; }
+
+  .up { color: var(--green); }
+  .dn { color: var(--red); }
+  .neu { color: var(--muted); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .chip { font-size: 10px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+  .chip.pass { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+  .chip.fail { background: rgba(248,81,73,0.1); color: var(--red); border: 1px solid rgba(248,81,73,0.2); }
+  .chip.warn { background: rgba(210,153,34,0.12); color: var(--amber); border: 1px solid rgba(210,153,34,0.2); }
+
+  .ema-stack { font-size: 11px; line-height: 1.6; }
+
+  .loading { text-align: center; padding: 60px 24px; color: var(--muted); }
+  .loading .spinner { width: 32px; height: 32px; border: 2px solid var(--border);
+    border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty { text-align: center; padding: 60px 24px; color: var(--muted); font-size: 15px; }
+
+  .progress-bar { height: 2px; background: var(--border); position: relative; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--blue); transition: width 0.3s;
+                   width: 0%; }
+
+  .legend { display: flex; gap: 14px; padding: 8px 24px; font-size: 11px; color: var(--muted);
+            border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  @media (max-width: 600px) {
+    header { padding: 12px 16px; }
+    .stats-bar, .controls, .tabs, .legend { padding-left: 16px; padding-right: 16px; }
+    td, thead th { padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📈</div>
+    <div>
+      <h1>Martin Luk 美股筛选器</h1>
+      <p>EMA 9/21/50 · AVWAP支撑 · 成交量放量 · 热门板块</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <span class="last-update" id="last-update">未扫描</span>
+    <button class="btn primary" id="scan-btn" onclick="startScan()">
+      <span id="scan-icon">▶</span> 开始扫描
+    </button>
+  </div>
+</header>
+
+<div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+<div class="stats-bar">
+  <div class="stat"><div class="lbl">通过筛选</div><div class="val" id="cnt-pass">—</div></div>
+  <div class="stat"><div class="lbl">EMA多头排列</div><div class="val" id="cnt-ema">—</div></div>
+  <div class="stat"><div class="lbl">AVWAP支撑</div><div class="val" id="cnt-avwap">—</div></div>
+  <div class="stat"><div class="lbl">整理形态</div><div class="val" id="cnt-consol">—</div></div>
+</div>
+
+<div class="controls">
+  <div class="filter-group">
+    <label>排序</label>
+    <select id="sort-sel" onchange="render()">
+      <option value="score">评分</option>
+      <option value="adr">ADR %</option>
+      <option value="volSurge">量能倍数</option>
+      <option value="chg1mo">月涨幅</option>
+      <option value="price">价格</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label>最低评分</label>
+    <div class="range-wrap">
+      <input type="range" id="score-min" min="0" max="100" value="40" step="5" oninput="onScore(this.value)">
+      <span id="score-val" style="font-size:12px;min-width:26px">40</span>
+    </div>
+  </div>
+  <div class="filter-group">
+    <label>最低ADR%</label>
+    <div class="range-wrap">
+      <input type="range" id="adr-min" min="0" max="15" value="3" step="0.5" oninput="onADR(this.value)">
+      <span id="adr-val" style="font-size:12px;min-width:26px">3</span>
+    </div>
+  </div>
+  <div class="filter-group">
+    <label>只看</label>
+    <select id="setup-sel" onchange="render()">
+      <option value="all">全部</option>
+      <option value="bull">EMA多头</option>
+      <option value="avwap">AVWAP支撑</option>
+      <option value="consol">整理形态</option>
+    </select>
+  </div>
+</div>
+
+<div class="tabs" id="sector-tabs"></div>
+
+<div class="legend">
+  <span><span class="legend-dot" style="background:#3fb950"></span>评分 ≥ 80 优先关注</span>
+  <span><span class="legend-dot" style="background:#d29922"></span>评分 60–79 观察清单</span>
+  <span><span class="legend-dot" style="background:#8b949e"></span>评分 &lt; 60 暂时观察</span>
+  <span style="margin-left:auto">数据来源：Yahoo Finance · 每次扫描约需 20 秒</span>
+</div>
+
+<div class="table-wrap">
+  <div id="content">
+    <div class="empty">点击「开始扫描」获取实时数据</div>
+  </div>
+</div>
+
+<script>
+let allData = [];
+let activeSector = 'all';
+let scoreMin = 40;
+let adrMin = 3;
+let sortKey = 'score';
+let sortAsc = false;
+let scanning = false;
+
+const sectors = ['全部', '量子计算', '人工智能', 'AI基础设施', '加密/区块链', '太空/国防', '金融科技', '核能/能源'];
+
+function buildTabs() {
+  const tabs = document.getElementById('sector-tabs');
+  tabs.innerHTML = sectors.map(s => {
+    const val = s === '全部' ? 'all' : s;
+    return `<button class="tab ${activeSector===val?'active':''}" onclick="setSector('${val}')">${s}</button>`;
+  }).join('');
+}
+
+function setSector(s) { activeSector = s; buildTabs(); render(); }
+
+function onScore(v) { scoreMin = +v; document.getElementById('score-val').textContent = v; render(); }
+function onADR(v)   { adrMin = +v;   document.getElementById('adr-val').textContent = v;   render(); }
+
+async function startScan() {
+  if (scanning) return;
+  scanning = true;
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  document.getElementById('scan-icon').textContent = '⏳';
+  btn.querySelector('span:last-child') && (btn.querySelector('span:last-child').textContent = ' 扫描中...');
+
+  const prog = document.getElementById('progress');
+  prog.style.width = '10%';
+
+  document.getElementById('content').innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>正在获取实时数据，约需 20 秒...</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">扫描 7 个板块 · 35 只美股</div>
+    </div>`;
+
+  try {
+    prog.style.width = '40%';
+    const res = await fetch('/api/screen');
+    prog.style.width = '85%';
+    const json = await res.json();
+    allData = json.data || [];
+    const d = new Date(json.updatedAt);
+    document.getElementById('last-update').textContent =
+      `更新于 ${d.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'})}`;
+    prog.style.width = '100%';
+    setTimeout(() => prog.style.width = '0%', 600);
+    render();
+  } catch(e) {
+    document.getElementById('content').innerHTML =
+      `<div class="empty">⚠️ 获取数据失败，请稍后重试<br><span style="font-size:12px;color:var(--muted)">${e.message}</span></div>`;
+    prog.style.width = '0%';
+  }
+
+  scanning = false;
+  btn.disabled = false;
+  document.getElementById('scan-icon').textContent = '↺';
+  btn.lastChild.textContent = ' 重新扫描';
+}
+
+function getFiltered() {
+  const setup = document.getElementById('setup-sel').value;
+  return allData.filter(d => {
+    if (activeSector !== 'all' && d.sector !== activeSector) return false;
+    if (d.score < scoreMin) return false;
+    if (d.adr < adrMin) return false;
+    if (setup === 'bull' && !d.emaBull) return false;
+    if (setup === 'avwap' && !d.avwapSupport) return false;
+    if (setup === 'consol' && !d.isConsolidating) return false;
+    return true;
+  }).sort((a, b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    return sortAsc ? av - bv : bv - av;
+  });
+}
+
+function scoreColor(s) {
+  if (s >= 80) return '#3fb950';
+  if (s >= 60) return '#d29922';
+  return '#8b949e';
+}
+
+function chip(pass, label) {
+  return `<span class="chip ${pass?'pass':'fail'}">${label}</span>`;
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = false; }
+  document.querySelectorAll('thead th').forEach(th => th.classList.remove('sorted'));
+  document.getElementById('th-' + key)?.classList.add('sorted');
+  render();
+}
+
+function render() {
+  const list = getFiltered();
+
+  // Update stats from full filtered (only score/sector filter, not setup)
+  const base = allData.filter(d => {
+    if (activeSector !== 'all' && d.sector !== activeSector) return false;
+    if (d.score < scoreMin) return false;
+    if (d.adr < adrMin) return false;
+    return true;
+  });
+  document.getElementById('cnt-pass').textContent  = base.length;
+  document.getElementById('cnt-ema').textContent   = base.filter(d => d.emaBull).length;
+  document.getElementById('cnt-avwap').textContent = base.filter(d => d.avwapSupport).length;
+  document.getElementById('cnt-consol').textContent= base.filter(d => d.isConsolidating).length;
+
+  if (!list.length) {
+    document.getElementById('content').innerHTML = `<div class="empty">没有符合条件的股票，尝试降低筛选标准</div>`;
+    return;
+  }
+
+  const arrow = dir => dir ? '↑' : '↓';
+
+  document.getElementById('content').innerHTML = `
+  <table>
+    <thead><tr>
+      <th id="th-ticker" onclick="sortBy('ticker')">股票 <span class="sort-arrow">↕</span></th>
+      <th id="th-score" onclick="sortBy('score')" class="sorted">评分 <span class="sort-arrow">${arrow(!sortAsc)}</span></th>
+      <th id="th-price" onclick="sortBy('price')">价格 <span class="sort-arrow">↕</span></th>
+      <th id="th-chg1d" onclick="sortBy('chg1d')">今日% <span class="sort-arrow">↕</span></th>
+      <th id="th-chg1mo" onclick="sortBy('chg1mo')">月涨幅 <span class="sort-arrow">↕</span></th>
+      <th id="th-adr" onclick="sortBy('adr')">ADR% <span class="sort-arrow">↕</span></th>
+      <th id="th-volSurge" onclick="sortBy('volSurge')">量能倍数 <span class="sort-arrow">↕</span></th>
+      <th>EMA均线</th>
+      <th>条件达成</th>
+    </tr></thead>
+    <tbody>
+      ${list.map(d => {
+        const sc = d.score;
+        const col = scoreColor(sc);
+        const c1d  = d.chg1d  > 0 ? 'up' : d.chg1d  < 0 ? 'dn' : 'neu';
+        const c1mo = d.chg1mo > 0 ? 'up' : d.chg1mo < 0 ? 'dn' : 'neu';
+        const tvUrl = `https://www.tradingview.com/chart/?symbol=${d.ticker}`;
+        return `<tr>
+          <td class="ticker-cell">
+            <div class="sym"><a href="${tvUrl}" target="_blank">${d.ticker}</a></div>
+            <div class="sec">${d.sector}</div>
+          </td>
+          <td>
+            <div class="score-wrap">
+              <span class="score-num" style="color:${col}">${sc}</span>
+              <div class="score-bar-bg">
+                <div class="score-bar-fill" style="width:${sc}%;background:${col}"></div>
+              </div>
+            </div>
+          </td>
+          <td>$${d.price.toFixed(2)}</td>
+          <td class="${c1d}">${d.chg1d > 0 ? '+' : ''}${d.chg1d.toFixed(2)}%</td>
+          <td class="${c1mo}">${d.chg1mo > 0 ? '+' : ''}${d.chg1mo.toFixed(1)}%</td>
+          <td>${d.adr.toFixed(1)}%</td>
+          <td>×${d.volSurge.toFixed(1)}</td>
+          <td class="ema-stack">
+            ${d.emaBull
+              ? `<span style="color:var(--green);font-size:11px">9 &gt; 21 &gt; 50 ✓</span>`
+              : `<span style="color:var(--red);font-size:11px">未多头排列</span>`}
+            <br>
+            <span style="font-size:10px;color:var(--muted)">
+              9:${d.ema9.toFixed(1)} 21:${d.ema21.toFixed(1)} 50:${d.ema50.toFixed(1)}
+            </span>
+          </td>
+          <td>
+            <div class="chips">
+              ${chip(d.emaBull, 'EMA多头')}
+              ${chip(d.avwapSupport, 'AVWAP支撑')}
+              ${chip(d.weeklyUp, '周线向上')}
+              ${chip(d.isConsolidating, '整理形态')}
+              ${chip(d.volSurge >= 1.8, `量×${d.volSurge.toFixed(1)}`)}
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+buildTabs();
+</script>
+</body>
+</html>
